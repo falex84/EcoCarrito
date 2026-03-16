@@ -631,7 +631,7 @@
         // Render Function
         function render() {
             productListBody.innerHTML = '';
-            
+
             if (products.length === 0) {
                 emptyState.classList.remove('hidden');
                 clearListBtn.classList.add('hidden');
@@ -663,11 +663,11 @@
                             </button>
                         </div>
                     </td>
-                    <td class="py-3 text-right text-gray-600">${usdFormatter.format(product.price)}</td>
-                    <td class="py-3 text-right text-blue-600 font-medium">${bcvRate > 0 ? bsFormatter.format(product.price * bcvRate) : '--'}</td>
+                    <td class="py-3 text-right text-gray-600">${product.price.toFixed(2)}</td>
+                    <td class="py-3 text-right text-blue-600 font-medium">${bcvRate > 0 ? (product.price * bcvRate).toFixed(2) : '--'}</td>
                     <td class="py-3 text-right">
-                        <div class="font-bold text-gray-800">${usdFormatter.format(subtotalUSD)}</div>
-                        <div class="text-xs text-blue-600">${bcvRate > 0 ? bsFormatter.format(subtotalBS) : ''}</div>
+                        <div class="font-bold text-gray-800">${subtotalUSD.toFixed(2)}</div>
+                        <div class="text-xs text-blue-600">${bcvRate > 0 ? subtotalBS.toFixed(2) : ''}</div>
                     </td>
                     <td class="py-3 text-center">
                         <button onclick="deleteProduct(${index})" class="text-red-500 hover:text-red-700 p-2 rounded-full hover:bg-red-50 transition" title="Eliminar">
