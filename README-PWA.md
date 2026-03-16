@@ -1,4 +1,4 @@
-# CarritoCCS - PWA (Progressive Web App)
+# EcoCarrito - PWA (Progressive Web App)
 
 Tu aplicación ahora es instalable en dispositivos Android como una PWA.
 

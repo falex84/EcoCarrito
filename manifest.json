@@ -1,6 +1,6 @@
 {
-  "name": "CarritoCCS - Control de Gastos",
-  "short_name": "CarritoCCS",
+  "name": "EcoCarrito - Control de Gastos",
+  "short_name": "EcoCarrito",
   "description": "Controla tus gastos de mercado en dólares y bolívares con la tasa BCV",
   "start_url": "/index.html",
   "display": "standalone",
