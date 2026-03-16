@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Gastos de Mercado - Tasa BCV</title>
+    <link rel="icon" type="image/png" href="./icon.png">
+    <link rel="apple-touch-icon" href="./icon.png">
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#10b981">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="CarritoCCS">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .banner {
+            background-image: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            height: 180px;
+            position: relative;
+            overflow: hidden;
+        }
+        .banner::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -10%;
+            width: 300px;
+            height: 300px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 50%;
+        }
+        .banner::after {
+            content: '';
+            position: absolute;
+            bottom: -30%;
+            left: -5%;
+            width: 200px;
+            height: 200px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 50%;
+        }
+        .card-shadow {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.3s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .rate-card {
+            background: linear-gradient(135deg, #059669 0%, #047857 100%);
+        }
+        .qty-btn {
+            transition: all 0.2s ease;
+        }
+        .qty-btn:hover {
+            transform: scale(1.1);
+        }
+        .qty-btn:active {
+            transform: scale(0.95);
+        }
+        .qty-input {
+            -moz-appearance: textfield;
+        }
+        .qty-input::-webkit-outer-spin-button,
+        .qty-input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        .pulse-dot {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .loading-spinner {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .status-online {
+            background-color: #10b981;
+            box-shadow: 0 0 8px #10b981;
+        }
+        .status-offline {
+            background-color: #ef4444;
+            box-shadow: 0 0 8px #ef4444;
+        }
+        .status-loading {
+            background-color: #f59e0b;
+            box-shadow: 0 0 8px #f59e0b;
+        }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <!-- Header Banner -->
+    <div class="banner flex items-center justify-center">
+        <div class="relative z-10 text-center text-white mt-8 px-4">
+            <h1 class="text-3xl md:text-4xl font-bold drop-shadow-md">EcoCarrito</h1>
+            <p class="text-sm md:text-base font-light drop-shadow-sm mt-2">Controla tus gastos en $ y Bs</p>
+        </div>
+    </div>
+
+    <div class="max-w-6xl mx-auto px-4 -mt-8 relative z-20 pb-10">
+        
+        <!-- BCV Rate Card with API -->
+        <div class="rate-card rounded-xl p-5 card-shadow mb-6 text-white">
+            <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="bg-white/20 p-3 rounded-full relative">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span id="apiStatusDot" class="status-dot status-loading absolute top-2 right-2"></span>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-lg flex items-center gap-2">
+                            Tasa BCV 
+                            <span id="apiBadge" class="text-xs bg-white/20 px-2 py-0.5 rounded-full">Actual</span>
+                        </h3>
+                        <p class="text-sm opacity-80" id="rateDate">Actualizado: --/--/----</p>
+                        <p class="text-xs opacity-70" id="apiSource">Fuente: dolarapi.com</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="text-center">
+                        <p class="text-xs opacity-80">1 USD =</p>
+                        <p class="text-3xl font-bold" id="displayRate">Bs. --</p>
+                    </div>
+                    <button id="refreshRateBtn" class="bg-white/20 hover:bg-white/30 p-3 rounded-lg transition" title="Actualizar tasa">
+                        <svg id="refreshIcon" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                    </button>
+                    <button id="editRateBtn" class="bg-white/20 hover:bg-white/30 p-3 rounded-lg transition" title="Editar manualmente">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <!-- API Status Message -->
+            <div id="apiStatusMessage" class="mt-3 text-sm opacity-90 flex items-center gap-2">
+                <span id="statusText">Conectando...</span>
+            </div>
+        </div>
+
+        <!-- Edit Rate Modal -->
+        <div id="rateModal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-xl p-6 max-w-md w-full card-shadow animate-fade-in">
+                <h3 class="text-xl font-bold mb-4 text-gray-800">Actualizar Tasa BCV</h3>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-600 mb-2">Tasa del día (Bs por $1)</label>
+                    <input type="number" id="bcvRateInput" step="0.01" min="0" class="w-full p-4 text-2xl font-bold border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 focus:outline-none" placeholder="Ej. 36.50">
+                </div>
+                <div class="flex gap-3 mb-4">
+                    <button id="fetchApiRateBtn" class="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg transition font-medium flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Obtener de API
+                    </button>
+                    <button id="saveRateBtn" class="flex-1 py-3 bg-green-700 hover:bg-green-800 text-white rounded-lg transition font-medium">Guardar</button>
+                </div>
+                <div class="flex gap-3">
+                    <button id="cancelRateBtn" class="flex-1 py-3 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition font-medium">Cancelar</button>
+                </div>
+                <p class="text-xs text-gray-500 mt-4">La tasa se obtiene automáticamente de <strong>dolarapi.com</strong></p>
+            </div>
+        </div>
+
+        <!-- Input Section -->
+        <div class="bg-white rounded-xl p-6 card-shadow mb-6">
+            <h2 class="text-xl font-semibold mb-4 text-gray-700 border-b pb-2 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+                Agregar Producto
+            </h2>
+            <form id="productForm" class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                <div class="md:col-span-5">
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Producto</label>
+                    <input type="text" id="productName" placeholder="Ej. Arroz, Carne, etc." class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:outline-none transition" required>
+                </div>
+                <div class="md:col-span-2">
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Cantidad</label>
+                    <input type="number" id="productQty" placeholder="1" min="1" value="1" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:outline-none transition" required>
+                </div>
+                <div class="md:col-span-3">
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Precio Unit. ($)</label>
+                    <input type="number" id="productPrice" placeholder="0.00" min="0" step="0.01" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:outline-none transition" required>
+                </div>
+                <div class="md:col-span-2">
+                    <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition duration-200 flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                        </svg>
+                        Agregar
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- List Section -->
+            <div class="lg:col-span-2 bg-white rounded-xl p-6 card-shadow min-h-[400px]">
+                <div class="flex justify-between items-center mb-4 border-b pb-2">
+                    <h2 class="text-xl font-semibold text-gray-700 flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                        Lista de Compras
+                    </h2>
+                    <button id="clearListBtn" class="text-sm text-red-500 hover:text-red-700 font-medium hidden flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        Borrar todo
+                    </button>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="text-gray-500 text-sm border-b">
+                                <th class="py-3 font-medium">Producto</th>
+                                <th class="py-3 font-medium text-center">Cantidad</th>
+                                <th class="py-3 font-medium text-right">Precio ($)</th>
+                                <th class="py-3 font-medium text-right">Precio (Bs)</th>
+                                <th class="py-3 font-medium text-right">Subtotal</th>
+                                <th class="py-3 font-medium text-center">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="productListBody" class="text-gray-700">
+                            <!-- Items will be injected here -->
+                        </tbody>
+                    </table>
+                    <div id="emptyState" class="text-center py-10 text-gray-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto mb-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                        </svg>
+                        <p>Tu lista está vacía. Agrega productos arriba.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary Section -->
+            <div class="lg:col-span-1 space-y-6">
+                <!-- Total Card -->
+                <div class="bg-white rounded-xl p-6 card-shadow sticky top-6">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                        Resumen de Gastos
+                    </h2>
+                    
+                    <div class="space-y-4">
+                        <div class="flex justify-between items-center text-gray-600">
+                            <span>Total Productos</span>
+                            <span id="totalItemsCount" class="font-bold bg-gray-100 px-2 py-1 rounded">0</span>
+                        </div>
+                        <div class="h-px bg-gray-200"></div>
+                        
+                        <!-- USD Total -->
+                        <div class="bg-green-50 p-4 rounded-lg border border-green-200">
+                            <div class="flex justify-between items-center">
+                                <span class="text-green-700 font-medium">Total en Dólares</span>
+                                <span id="grandTotalUSD" class="text-2xl font-bold text-green-700">$0.00</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Bs Total -->
+                        <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                            <div class="flex justify-between items-center">
+                                <span class="text-blue-700 font-medium">Total en Bolívares</span>
+                                <span id="grandTotalBS" class="text-2xl font-bold text-blue-700">Bs. 0,00</span>
+                            </div>
+                            <p class="text-xs text-blue-600 mt-2">Tasa: <span id="summaryRate">1 USD = Bs. --</span></p>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 space-y-3">
+                        <button id="exportBtn" class="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition font-medium flex items-center justify-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            Exportar Lista
+                        </button>
+                        <button id="resetBtn" class="w-full py-3 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition font-medium">
+                            Reiniciar Lista
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Quick Rate Update -->
+                <div class="bg-gradient-to-r from-yellow-400 to-orange-400 rounded-xl p-4 card-shadow text-white">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium opacity-90">¿Tasa desactualizada?</p>
+                            <p class="text-xs opacity-75">Actualiza desde la API</p>
+                        </div>
+                        <button id="quickRateBtn" class="bg-white/20 hover:bg-white/30 p-2 rounded-lg transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Modal -->
+    <div id="exportModal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl p-6 max-w-lg w-full card-shadow animate-fade-in max-h-[80vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-gray-800">📋 Lista para Compartir</h3>
+                <button id="closeExportBtn" class="text-gray-500 hover:text-gray-700">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div id="exportContent" class="bg-gray-50 p-4 rounded-lg mb-4 text-sm font-mono whitespace-pre-wrap"></div>
+            <div class="flex gap-3">
+                <button id="copyExportBtn" class="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition font-medium">
+                    📋 Copiar Texto
+                </button>
+                <button id="whatsappExportBtn" class="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg transition font-medium">
+                    💬 WhatsApp
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Quantity Modal -->
+    <div id="qtyModal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl p-6 max-w-sm w-full card-shadow animate-fade-in">
+            <h3 class="text-xl font-bold mb-4 text-gray-800">Modificar Cantidad</h3>
+            <p id="qtyProductName" class="text-green-600 font-medium mb-4"></p>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-600 mb-2">Nueva Cantidad</label>
+                <div class="flex items-center gap-3">
+                    <button id="qtyDecrease" class="qty-btn bg-gray-200 hover:bg-gray-300 text-gray-700 w-12 h-12 rounded-lg flex items-center justify-center text-xl font-bold">
+                        −
+                    </button>
+                    <input type="number" id="qtyInput" min="1" value="1" class="qty-input w-24 text-center text-2xl font-bold border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 focus:outline-none">
+                    <button id="qtyIncrease" class="qty-btn bg-green-500 hover:bg-green-600 text-white w-12 h-12 rounded-lg flex items-center justify-center text-xl font-bold">
+                        +
+                    </button>
+                </div>
+            </div>
+            <div class="flex gap-3">
+                <button id="cancelQtyBtn" class="flex-1 py-3 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition font-medium">Cancelar</button>
+                <button id="saveQtyBtn" class="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg transition font-medium">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="hidden fixed bottom-4 right-4 bg-gray-800 text-white px-6 py-3 rounded-lg card-shadow animate-fade-in z-50">
+        <span id="toastMessage"></span>
+    </div>
+
+    <script>
+        // State Management
+        let products = JSON.parse(localStorage.getItem('marketList')) || [];
+        let bcvRate = parseFloat(localStorage.getItem('bcvRate')) || 0;
+        let rateDate = localStorage.getItem('rateDate') || '';
+        let rateSource = localStorage.getItem('rateSource') || 'manual';
+        let currentEditIndex = null;
+        let isApiLoading = false;
+
+        // API Configuration - Venezuela BCV (Official rate)
+        const API_URL = 'https://ve.dolarapi.com/v1/dolares';
+
+        // DOM Elements
+        const form = document.getElementById('productForm');
+        const productListBody = document.getElementById('productListBody');
+        const emptyState = document.getElementById('emptyState');
+        const grandTotalUSDEl = document.getElementById('grandTotalUSD');
+        const grandTotalBSEl = document.getElementById('grandTotalBS');
+        const totalItemsCountEl = document.getElementById('totalItemsCount');
+        const summaryRateEl = document.getElementById('summaryRate');
+        const displayRateEl = document.getElementById('displayRate');
+        const rateDateEl = document.getElementById('rateDate');
+        const apiSourceEl = document.getElementById('apiSource');
+        const clearListBtn = document.getElementById('clearListBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const editRateBtn = document.getElementById('editRateBtn');
+        const quickRateBtn = document.getElementById('quickRateBtn');
+        const refreshRateBtn = document.getElementById('refreshRateBtn');
+        const rateModal = document.getElementById('rateModal');
+        const bcvRateInput = document.getElementById('bcvRateInput');
+        const saveRateBtn = document.getElementById('saveRateBtn');
+        const cancelRateBtn = document.getElementById('cancelRateBtn');
+        const fetchApiRateBtn = document.getElementById('fetchApiRateBtn');
+        const exportBtn = document.getElementById('exportBtn');
+        const exportModal = document.getElementById('exportModal');
+        const closeExportBtn = document.getElementById('closeExportBtn');
+        const copyExportBtn = document.getElementById('copyExportBtn');
+        const whatsappExportBtn = document.getElementById('whatsappExportBtn');
+        const exportContent = document.getElementById('exportContent');
+        const apiStatusDot = document.getElementById('apiStatusDot');
+        const apiStatusMessage = document.getElementById('apiStatusMessage');
+        const statusText = document.getElementById('statusText');
+        const refreshIcon = document.getElementById('refreshIcon');
+        
+        // Quantity Modal Elements
+        const qtyModal = document.getElementById('qtyModal');
+        const qtyProductName = document.getElementById('qtyProductName');
+        const qtyInput = document.getElementById('qtyInput');
+        const qtyIncrease = document.getElementById('qtyIncrease');
+        const qtyDecrease = document.getElementById('qtyDecrease');
+        const saveQtyBtn = document.getElementById('saveQtyBtn');
+        const cancelQtyBtn = document.getElementById('cancelQtyBtn');
+
+        // Toast Elements
+        const toast = document.getElementById('toast');
+        const toastMessage = document.getElementById('toastMessage');
+
+        // Currency Formatters
+        const usdFormatter = new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: 'USD',
+            minimumFractionDigits: 2
+        });
+
+        const bsFormatter = new Intl.NumberFormat('es-VE', {
+            style: 'currency',
+            currency: 'VES',
+            minimumFractionDigits: 2
+        });
+
+        // Show Toast Notification
+        function showToast(message, duration = 3000) {
+            toastMessage.textContent = message;
+            toast.classList.remove('hidden');
+            setTimeout(() => {
+                toast.classList.add('hidden');
+            }, duration);
+        }
+
+        // Set API Status
+        function setApiStatus(status, message) {
+            apiStatusDot.className = 'status-dot absolute top-2 right-2';
+            if (status === 'online') {
+                apiStatusDot.classList.add('status-online');
+                statusText.textContent = message;
+            } else if (status === 'offline') {
+                apiStatusDot.classList.add('status-offline');
+                statusText.textContent = message;
+            } else if (status === 'loading') {
+                apiStatusDot.classList.add('status-loading');
+                statusText.textContent = message;
+            }
+        }
+
+        // Fetch BCV Rate from API
+        async function fetchBcvRate() {
+            if (isApiLoading) return;
+            
+            isApiLoading = true;
+            refreshIcon.classList.add('loading-spinner');
+            setApiStatus('loading', 'Conectando con ve.dolarapi.com...');
+
+            try {
+                const response = await fetch(API_URL);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                // Parse the rate from API response
+                // data[0] = Oficial (BCV), data[1] = Paralelo
+                const oficialData = data.find(d => d.fuente === 'oficial');
+                
+                if (!oficialData) {
+                    throw new Error('No se encontró la tasa oficial del BCV');
+                }
+                
+                const rate = parseFloat(oficialData.promedio);
+                
+                if (isNaN(rate) || rate <= 0) {
+                    throw new Error('Tasa inválida recibida de la API');
+                }
+
+                // Update rate
+                bcvRate = rate;
+                rateDate = new Date().toLocaleDateString('es-VE', { 
+                    day: '2-digit', 
+                    month: '2-digit', 
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                rateSource = 'api';
+
+                // Save to localStorage
+                localStorage.setItem('bcvRate', bcvRate.toString());
+                localStorage.setItem('rateDate', rateDate);
+                localStorage.setItem('rateSource', rateSource);
+
+                // Update UI
+                updateRateDisplay();
+                render();
+                
+                setApiStatus('online', `Actualizado: ${new Date().toLocaleTimeString('es-VE')}`);
+                showToast('Tasa BCV actualizada desde API');
+
+            } catch (error) {
+                console.error('Error fetching BCV rate:', error);
+                setApiStatus('offline', 'Error al conectar con API. Usando tasa guardada.');
+                showToast('No se pudo conectar con la API. Verifica tu conexión.', 5000);
+                
+                // Use cached rate if available
+                if (bcvRate > 0) {
+                    updateRateDisplay();
+                }
+            } finally {
+                isApiLoading = false;
+                refreshIcon.classList.remove('loading-spinner');
+            }
+        }
+
+        // Update Rate Display
+        function updateRateDisplay() {
+            if (bcvRate > 0) {
+                displayRateEl.textContent = `Bs. ${bcvRate.toFixed(2)}`;
+                summaryRateEl.textContent = `1 USD = Bs. ${bcvRate.toFixed(2)}`;
+                if (rateDate) {
+                    rateDateEl.textContent = `Actualizado: ${rateDate}`;
+                } else {
+                    rateDateEl.textContent = 'Fecha no disponible';
+                }
+                apiSourceEl.textContent = rateSource === 'api' ? 'Fuente: dolarapi.com (API)' : 'Fuente: Manual';
+            } else {
+                displayRateEl.textContent = 'Bs. --';
+                summaryRateEl.textContent = 'Tasa no configurada';
+                rateDateEl.textContent = 'Configura la tasa BCV';
+                apiSourceEl.textContent = 'Fuente: No disponible';
+            }
+        }
+
+        // Render Function
+        function render() {
+            productListBody.innerHTML = '';
+            
+            if (products.length === 0) {
+                emptyState.classList.remove('hidden');
+                clearListBtn.classList.add('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+                clearListBtn.classList.remove('hidden');
+            }
+
+            let totalUSD = 0;
+            let totalQty = 0;
+
+            products.forEach((product, index) => {
+                const subtotalUSD = product.price * product.qty;
+                const subtotalBS = subtotalUSD * bcvRate;
+                totalUSD += subtotalUSD;
+                totalQty += parseInt(product.qty);
+
+                const row = document.createElement('tr');
+                row.className = 'border-b hover:bg-gray-50 transition animate-fade-in';
+                row.innerHTML = `
+                    <td class="py-3 font-medium text-gray-800">${product.name}</td>
+                    <td class="py-3 text-center">
+                        <div class="flex items-center justify-center gap-2">
+                            <button onclick="showQtyModal(${index})" class="qty-btn bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded-lg flex items-center gap-1 text-sm font-medium">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                                ${product.qty}
+                            </button>
+                        </div>
+                    </td>
+                    <td class="py-3 text-right text-gray-600">${usdFormatter.format(product.price)}</td>
+                    <td class="py-3 text-right text-blue-600 font-medium">${bcvRate > 0 ? bsFormatter.format(product.price * bcvRate) : '--'}</td>
+                    <td class="py-3 text-right">
+                        <div class="font-bold text-gray-800">${usdFormatter.format(subtotalUSD)}</div>
+                        <div class="text-xs text-blue-600">${bcvRate > 0 ? bsFormatter.format(subtotalBS) : ''}</div>
+                    </td>
+                    <td class="py-3 text-center">
+                        <button onclick="deleteProduct(${index})" class="text-red-500 hover:text-red-700 p-2 rounded-full hover:bg-red-50 transition" title="Eliminar">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </button>
+                    </td>
+                `;
+                productListBody.appendChild(row);
+            });
+
+            // Update Summary
+            const totalBS = totalUSD * bcvRate;
+            grandTotalUSDEl.textContent = usdFormatter.format(totalUSD);
+            grandTotalBSEl.textContent = bcvRate > 0 ? `Bs. ${totalBS.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Bs. --';
+            totalItemsCountEl.textContent = totalQty;
+
+            // Save to LocalStorage
+            localStorage.setItem('marketList', JSON.stringify(products));
+            
+            updateRateDisplay();
+        }
+
+        // Add Product
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            const nameInput = document.getElementById('productName');
+            const qtyInput = document.getElementById('productQty');
+            const priceInput = document.getElementById('productPrice');
+
+            const newProduct = {
+                name: nameInput.value.trim(),
+                qty: parseFloat(qtyInput.value),
+                price: parseFloat(priceInput.value)
+            };
+
+            if (newProduct.name && newProduct.qty > 0 && newProduct.price >= 0) {
+                products.push(newProduct);
+                render();
+                form.reset();
+                document.getElementById('productQty').value = '1';
+                nameInput.focus();
+            }
+        });
+
+        // Delete Product
+        window.deleteProduct = (index) => {
+            products.splice(index, 1);
+            render();
+        };
+
+        // Show Quantity Modal
+        window.showQtyModal = (index) => {
+            currentEditIndex = index;
+            const product = products[index];
+            qtyProductName.textContent = product.name;
+            qtyInput.value = product.qty;
+            qtyModal.classList.remove('hidden');
+            qtyInput.focus();
+            qtyInput.select();
+        };
+
+        // Quantity Increase
+        qtyIncrease.addEventListener('click', () => {
+            const current = parseInt(qtyInput.value) || 1;
+            qtyInput.value = current + 1;
+        });
+
+        // Quantity Decrease
+        qtyDecrease.addEventListener('click', () => {
+            const current = parseInt(qtyInput.value) || 1;
+            if (current > 1) {
+                qtyInput.value = current - 1;
+            }
+        });
+
+        // Save Quantity
+        saveQtyBtn.addEventListener('click', () => {
+            const newQty = parseInt(qtyInput.value);
+            if (newQty > 0 && currentEditIndex !== null) {
+                products[currentEditIndex].qty = newQty;
+                render();
+                qtyModal.classList.add('hidden');
+                currentEditIndex = null;
+            } else {
+                alert('Por favor ingresa una cantidad válida mayor a 0');
+            }
+        });
+
+        // Cancel Quantity Edit
+        cancelQtyBtn.addEventListener('click', () => {
+            qtyModal.classList.add('hidden');
+            currentEditIndex = null;
+        });
+
+        // Close qty modal on outside click
+        qtyModal.addEventListener('click', (e) => {
+            if (e.target === qtyModal) {
+                qtyModal.classList.add('hidden');
+                currentEditIndex = null;
+            }
+        });
+
+        // Handle Enter key in qty input
+        qtyInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                saveQtyBtn.click();
+            }
+        });
+
+        // Reset List
+        resetBtn.addEventListener('click', () => {
+            if(confirm('¿Estás seguro de que quieres borrar toda la lista?')) {
+                products = [];
+                render();
+            }
+        });
+
+        // Clear List Button
+        clearListBtn.addEventListener('click', () => {
+            if(confirm('¿Borrar todos los productos de la lista?')) {
+                products = [];
+                render();
+            }
+        });
+
+        // Rate Modal Functions
+        editRateBtn.addEventListener('click', () => {
+            bcvRateInput.value = bcvRate > 0 ? bcvRate.toFixed(2) : '';
+            rateModal.classList.remove('hidden');
+            bcvRateInput.focus();
+        });
+
+        quickRateBtn.addEventListener('click', () => {
+            bcvRateInput.value = bcvRate > 0 ? bcvRate.toFixed(2) : '';
+            rateModal.classList.remove('hidden');
+            bcvRateInput.focus();
+        });
+
+        refreshRateBtn.addEventListener('click', () => {
+            fetchBcvRate();
+        });
+
+        cancelRateBtn.addEventListener('click', () => {
+            rateModal.classList.add('hidden');
+        });
+
+        // Fetch API Rate Button
+        fetchApiRateBtn.addEventListener('click', async () => {
+            await fetchBcvRate();
+            bcvRateInput.value = bcvRate > 0 ? bcvRate.toFixed(2) : '';
+        });
+
+        saveRateBtn.addEventListener('click', () => {
+            const newRate = parseFloat(bcvRateInput.value);
+            if (newRate > 0) {
+                bcvRate = newRate;
+                rateDate = new Date().toLocaleDateString('es-VE', { 
+                    day: '2-digit', 
+                    month: '2-digit', 
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                rateSource = 'manual';
+                render();
+                rateModal.classList.add('hidden');
+                showToast('Tasa actualizada manualmente');
+            } else {
+                alert('Por favor ingresa una tasa válida mayor a 0');
+            }
+        });
+
+        // Close modal on outside click
+        rateModal.addEventListener('click', (e) => {
+            if (e.target === rateModal) {
+                rateModal.classList.add('hidden');
+            }
+        });
+
+        // Export Functions
+        exportBtn.addEventListener('click', () => {
+            if (products.length === 0) {
+                alert('Agrega productos antes de exportar');
+                return;
+            }
+
+            let totalUSD = 0;
+            let exportText = `*MI LISTA DE MERCADO*\n`;
+            exportText += `${new Date().toLocaleDateString('es-VE')}\n`;
+            exportText += `Tasa BCV: Bs. ${bcvRate.toFixed(2)}\n`;
+            exportText += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+            products.forEach((product, index) => {
+                const subtotalUSD = product.price * product.qty;
+                const subtotalBS = subtotalUSD * bcvRate;
+                totalUSD += subtotalUSD;
+
+                exportText += `${index + 1}. ${product.name}\n`;
+                exportText += `   Qty: ${product.qty} x $${product.price.toFixed(2)}\n`;
+                exportText += `   Subtotal: ${usdFormatter.format(subtotalUSD)}`;
+                if (bcvRate > 0) {
+                    exportText += ` | Bs. ${subtotalBS.toLocaleString('es-VE', { minimumFractionDigits: 2 })}`;
+                }
+                exportText += `\n\n`;
+            });
+
+            const totalBS = totalUSD * bcvRate;
+            exportText += `━━━━━━━━━━━━━━━━━━━━\n`;
+            exportText += `*TOTAL: ${usdFormatter.format(totalUSD)}*\n`;
+            if (bcvRate > 0) {
+                exportText += `Total Bs: ${totalBS.toLocaleString('es-VE', { minimumFractionDigits: 2 })}\n`;
+            }
+            exportText += `\nCreado con Mi Lista de Mercado`;
+
+            exportContent.textContent = exportText;
+            exportModal.classList.remove('hidden');
+        });
+
+        closeExportBtn.addEventListener('click', () => {
+            exportModal.classList.add('hidden');
+        });
+
+        exportModal.addEventListener('click', (e) => {
+            if (e.target === exportModal) {
+                exportModal.classList.add('hidden');
+            }
+        });
+
+        copyExportBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(exportContent.textContent).then(() => {
+                copyExportBtn.textContent = '¡Copiado!';
+                setTimeout(() => {
+                    copyExportBtn.textContent = 'Copiar Texto';
+                }, 2000);
+            });
+        });
+
+        whatsappExportBtn.addEventListener('click', () => {
+            const text = encodeURIComponent(exportContent.textContent);
+            window.open(`https://wa.me/?text=${text}`, '_blank');
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                rateModal.classList.add('hidden');
+                exportModal.classList.add('hidden');
+                qtyModal.classList.add('hidden');
+                currentEditIndex = null;
+            }
+        });
+
+        // Auto-fetch rate on load (with delay to not block UI)
+        setTimeout(() => {
+            if (bcvRate > 0) {
+                setApiStatus('online', 'Tasa cargada desde caché');
+            } else {
+                fetchBcvRate();
+            }
+        }, 500);
+
+        // Auto-refresh rate every 30 minutes if page is open
+        setInterval(() => {
+            fetchBcvRate();
+        }, 1800000); // 30 minutes
+
+        // Initial Render
+        updateRateDisplay();
+        render();
+
+        // Register Service Worker for PWA
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(registration => {
+                        console.log('SW registered:', registration.scope);
+                    })
+                    .catch(error => {
+                        console.log('SW registration failed:', error);
+                    });
+            });
+        }
+
+    </script>
+</body>
+</html>
+
