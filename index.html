@@ -456,9 +456,10 @@
         let isApiLoading = false;
 
         // API Configuration - Venezuela BCV (Official rate)
-        // Múltiples fuentes para mayor confiabilidad
+        // Fuente principal: DolarAPI que obtiene datos del BCV
         const API_SOURCES = [
-            { name: 'DolarAPI', url: 'https://ve.dolarapi.com/v1/dolares', parser: parseDolarApi },
+            { name: 'DolarAPI', url: 'https://ve.dolarapi.com/v1/dolares/oficial', parser: parseDolarApiOficial },
+            { name: 'DolarAPI (lista)', url: 'https://ve.dolarapi.com/v1/dolares', parser: parseDolarApi },
             { name: 'Exchangemonitor', url: 'https://api.exchangemonitor.com/api/v1/latest', parser: parseExchangeMonitor },
             { name: 'MonitorDolar', url: 'https://monitor-dolar-venezuela.vercel.app/api/price', parser: parseMonitorDolar }
         ];
