@@ -456,8 +456,9 @@
         let isApiLoading = false;
 
         // API Configuration - Venezuela BCV (Official rate)
-        // Fuente principal: DolarAPI que obtiene datos del BCV
+        // Fuente principal: API de Vercel que hace scraping del BCV
         const API_SOURCES = [
+            { name: 'Vercel API (BCV)', url: '/api/bcv-rate', parser: parseVercelBcv },
             { name: 'DolarAPI', url: 'https://ve.dolarapi.com/v1/dolares/oficial', parser: parseDolarApiOficial },
             { name: 'DolarAPI (lista)', url: 'https://ve.dolarapi.com/v1/dolares', parser: parseDolarApi },
             { name: 'Exchangemonitor', url: 'https://api.exchangemonitor.com/api/v1/latest', parser: parseExchangeMonitor },
@@ -658,6 +659,16 @@
             if (bcvRate > 0) {
                 updateRateDisplay();
             }
+        }
+
+        /**
+         * Parsear respuesta de la API de Vercel (BCV scraping)
+         */
+        function parseVercelBcv(data) {
+            if (data && data.success && data.bcvRate) {
+                return parseFloat(data.bcvRate);
+            }
+            throw new Error('Formato inválido de Vercel BCV API');
         }
 
         /**
