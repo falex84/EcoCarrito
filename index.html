@@ -180,7 +180,7 @@
     <div class="banner flex items-center justify-center">
         <div class="relative z-10 text-center text-white mt-8 px-4">
             <h1 class="text-3xl md:text-4xl font-bold drop-shadow-md">EcoCarrito</h1>
-            <p class="text-sm md:text-base font-light drop-shadow-sm mt-2">Controla tus gastos en $ y Bs</p>
+            <p class="text-sm md:text-base font-light drop-shadow-sm mt-2">   </p>
         </div>
     </div>
 
@@ -242,7 +242,7 @@
                 Agregar Producto
             </h2>
             <form id="productForm" class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                <div class="md:col-span-5">
+                <div class="md:col-span-4">
                     <label class="block text-sm font-medium text-gray-600 mb-1">Producto</label>
                     <input type="text" id="productName" placeholder="Ej. Arroz, Carne, etc." class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:outline-none transition" required>
                 </div>
@@ -251,10 +251,13 @@
                     <input type="number" id="productQty" placeholder="1" min="1" value="1" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:outline-none transition" required>
                 </div>
                 <div class="md:col-span-3">
-                    <label class="block text-sm font-medium text-gray-600 mb-1">Precio Unit. ($)</label>
-                    <input type="number" id="productPrice" placeholder="0.00" min="0" step="0.01" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:outline-none transition" required>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Precio Unit.</label>
+                    <div class="flex gap-2">
+                        <input type="number" id="productPriceUSD" placeholder="$ 0.00" min="0" step="0.01" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:outline-none transition">
+                        <input type="number" id="productPriceBS" placeholder="Bs 0.00" min="0" step="0.01" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none transition">
+                    </div>
                 </div>
-                <div class="md:col-span-2">
+                <div class="md:col-span-3">
                     <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition duration-200 flex items-center justify-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -263,6 +266,7 @@
                     </button>
                 </div>
             </form>
+            <p class="text-xs text-gray-500 mt-2">💡 Ingresa el precio en $ o en Bs, se convertirá automáticamente usando la tasa BCV</p>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -473,6 +477,10 @@
         const toast = document.getElementById('toast');
         const toastMessage = document.getElementById('toastMessage');
 
+        // Price Input Elements
+        const productPriceUSD = document.getElementById('productPriceUSD');
+        const productPriceBS = document.getElementById('productPriceBS');
+
         // Currency Formatters
         const usdFormatter = new Intl.NumberFormat('en-US', {
             style: 'currency',
@@ -494,6 +502,44 @@
                 toast.classList.add('hidden');
             }, duration);
         }
+
+        // Convert price between USD and BS
+        function convertPrice(from, value) {
+            if (!bcvRate || bcvRate <= 0) {
+                showToast('⚠️ Configura la tasa BCV primero', 3000);
+                return '';
+            }
+            
+            if (!value || value < 0) return '';
+            
+            if (from === 'USD') {
+                return (value * bcvRate).toFixed(2);
+            } else {
+                return (value / bcvRate).toFixed(2);
+            }
+        }
+
+        // Handle USD input change
+        productPriceUSD.addEventListener('input', (e) => {
+            const usdValue = parseFloat(e.target.value);
+            if (usdValue >= 0) {
+                const bsValue = convertPrice('USD', usdValue);
+                productPriceBS.value = bsValue;
+            } else {
+                productPriceBS.value = '';
+            }
+        });
+
+        // Handle BS input change
+        productPriceBS.addEventListener('input', (e) => {
+            const bsValue = parseFloat(e.target.value);
+            if (bsValue >= 0) {
+                const usdValue = convertPrice('BS', bsValue);
+                productPriceUSD.value = usdValue;
+            } else {
+                productPriceUSD.value = '';
+            }
+        });
 
         // Update Rate Display
         function updateRateDisplay() {
@@ -582,12 +628,19 @@
             
             const nameInput = document.getElementById('productName');
             const qtyInput = document.getElementById('productQty');
-            const priceInput = document.getElementById('productPrice');
+            const priceUSD = document.getElementById('productPriceUSD');
+            const priceBS = document.getElementById('productPriceBS');
+
+            // Use USD price if available, otherwise convert from BS
+            let price = parseFloat(priceUSD.value);
+            if (!price && priceBS.value) {
+                price = parseFloat(priceBS.value) / bcvRate;
+            }
 
             const newProduct = {
                 name: nameInput.value.trim(),
                 qty: parseFloat(qtyInput.value),
-                price: parseFloat(priceInput.value)
+                price: price || 0
             };
 
             if (newProduct.name && newProduct.qty > 0 && newProduct.price >= 0) {
@@ -596,6 +649,8 @@
                 form.reset();
                 document.getElementById('productQty').value = '1';
                 nameInput.focus();
+            } else {
+                showToast('⚠️ Ingresa producto, cantidad y precio', 3000);
             }
         });
 
