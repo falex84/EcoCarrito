@@ -665,9 +665,15 @@
          */
         function parseDolarApiOficial(data) {
             // El endpoint /oficial devuelve un solo objeto
-            if (data && data.compra && data.venta) {
-                // Usar el promedio o el valor de venta
-                return parseFloat(data.venta) || parseFloat(data.promedio) || parseFloat(data.compra);
+            // Nota: compra y venta pueden ser null, usar promedio
+            if (data && data.promedio) {
+                return parseFloat(data.promedio);
+            }
+            if (data && data.venta) {
+                return parseFloat(data.venta);
+            }
+            if (data && data.compra) {
+                return parseFloat(data.compra);
             }
             throw new Error('Formato inválido de DolarAPI');
         }
@@ -678,8 +684,11 @@
         function parseDolarApi(data) {
             // data es un array, buscar el oficial
             const oficial = data.find(d => d.nombre === 'oficial' || d.fuente === 'oficial');
-            if (oficial && oficial.venta) {
-                return parseFloat(oficial.venta);
+            if (oficial) {
+                // Intentar venta, luego promedio, luego compra
+                if (oficial.venta) return parseFloat(oficial.venta);
+                if (oficial.promedio) return parseFloat(oficial.promedio);
+                if (oficial.compra) return parseFloat(oficial.compra);
             }
             throw new Error('No se encontró la tasa oficial');
         }
