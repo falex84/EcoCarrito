@@ -555,57 +555,160 @@
         }
 
         /**
-         * Obtener tasa del BCV directamente desde www.bcv.org.ve
-         * Usa proxies CORS para evitar restricciones del navegador
+         * Obtener tasa del BCV usando múltiples fuentes de API
+         * Intenta cada fuente en orden hasta encontrar una válida
          */
         async function fetchBcvRate() {
             if (isApiLoading) return;
 
             isApiLoading = true;
             refreshIcon.classList.add('loading-spinner');
-            setApiStatus('loading', 'Conectando con BCV...');
+            setApiStatus('loading', 'Buscando tasa BCV...');
 
+            // Intentar cada fuente de API en orden
+            for (const source of API_SOURCES) {
+                try {
+                    setApiStatus('loading', `Conectando con ${source.name}...`);
+                    
+                    const response = await fetch(source.url, {
+                        signal: AbortSignal.timeout(10000), // 10 segundos timeout
+                        headers: { 'Accept': 'application/json' }
+                    });
+
+                    if (!response.ok) {
+                        console.warn(`${source.name} falló con status ${response.status}`);
+                        continue;
+                    }
+
+                    const data = await response.json();
+                    const rate = source.parser(data);
+
+                    if (rate && rate > 0 && rate < 1000) {
+                        // Éxito - actualizar y guardar
+                        bcvRate = rate;
+                        rateDate = new Date().toLocaleDateString('es-VE', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
+                        rateSource = 'api';
+
+                        localStorage.setItem('bcvRate', bcvRate.toString());
+                        localStorage.setItem('rateDate', rateDate);
+                        localStorage.setItem('rateSource', rateSource);
+
+                        updateRateDisplay();
+                        render();
+
+                        setApiStatus('online', `Actualizado: ${new Date().toLocaleTimeString('es-VE')}`);
+                        showToast(`Tasa BCV actualizada desde ${source.name}`);
+                        
+                        isApiLoading = false;
+                        refreshIcon.classList.remove('loading-spinner');
+                        return;
+                    }
+                } catch (error) {
+                    console.warn(`Error con ${source.name}:`, error.message);
+                    // Continuar con la siguiente fuente
+                }
+            }
+
+            // Si todas las APIs fallan, intentar scraping directo del BCV
+            console.log('Todas las APIs fallaron, intentando scraping directo del BCV...');
             try {
                 const rate = await fetchBcvDirect();
                 
-                if (!rate || rate <= 0) {
-                    throw new Error('Tasa inválida recibida del BCV');
-                }
+                if (rate && rate > 0) {
+                    bcvRate = rate;
+                    rateDate = new Date().toLocaleDateString('es-VE', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                    rateSource = 'bcv';
 
-                // Éxito - actualizar y guardar
-                bcvRate = rate;
-                rateDate = new Date().toLocaleDateString('es-VE', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                });
-                rateSource = 'bcv';
+                    localStorage.setItem('bcvRate', bcvRate.toString());
+                    localStorage.setItem('rateDate', rateDate);
+                    localStorage.setItem('rateSource', rateSource);
 
-                localStorage.setItem('bcvRate', bcvRate.toString());
-                localStorage.setItem('rateDate', rateDate);
-                localStorage.setItem('rateSource', rateSource);
-
-                updateRateDisplay();
-                render();
-
-                setApiStatus('online', `Actualizado: ${new Date().toLocaleTimeString('es-VE')}`);
-                showToast('Tasa BCV actualizada desde www.bcv.org.ve');
-                
-            } catch (error) {
-                console.error('Error fetching BCV rate:', error);
-                setApiStatus('offline', 'Error al conectar con BCV. Usando tasa guardada.');
-                showToast('No se pudo conectar con BCV. Verifica tu conexión.', 5000);
-
-                // Usar tasa en caché si está disponible
-                if (bcvRate > 0) {
                     updateRateDisplay();
+                    render();
+
+                    setApiStatus('online', `Actualizado: ${new Date().toLocaleTimeString('es-VE')}`);
+                    showToast('Tasa BCV actualizada desde www.bcv.org.ve');
+                    
+                    isApiLoading = false;
+                    refreshIcon.classList.remove('loading-spinner');
+                    return;
                 }
-            } finally {
-                isApiLoading = false;
-                refreshIcon.classList.remove('loading-spinner');
+            } catch (error) {
+                console.error('Error con scraping BCV:', error);
             }
+
+            // Todo falló
+            isApiLoading = false;
+            refreshIcon.classList.remove('loading-spinner');
+            setApiStatus('offline', 'Error al conectar. Usando tasa guardada.');
+            showToast('No se pudo obtener la tasa. Verifica tu conexión.', 5000);
+
+            if (bcvRate > 0) {
+                updateRateDisplay();
+            }
+        }
+
+        /**
+         * Parsear respuesta de DolarAPI (endpoint oficial)
+         */
+        function parseDolarApiOficial(data) {
+            // El endpoint /oficial devuelve un solo objeto
+            if (data && data.compra && data.venta) {
+                // Usar el promedio o el valor de venta
+                return parseFloat(data.venta) || parseFloat(data.promedio) || parseFloat(data.compra);
+            }
+            throw new Error('Formato inválido de DolarAPI');
+        }
+
+        /**
+         * Parsear respuesta de DolarAPI (lista de dólares)
+         */
+        function parseDolarApi(data) {
+            // data es un array, buscar el oficial
+            const oficial = data.find(d => d.nombre === 'oficial' || d.fuente === 'oficial');
+            if (oficial && oficial.venta) {
+                return parseFloat(oficial.venta);
+            }
+            throw new Error('No se encontró la tasa oficial');
+        }
+
+        /**
+         * Parsear respuesta de ExchangeMonitor
+         */
+        function parseExchangeMonitor(data) {
+            // Buscar tasa BCV en la respuesta
+            if (data && data.bcv) {
+                return parseFloat(data.bcv);
+            }
+            if (data && data.data && data.data.bcv) {
+                return parseFloat(data.data.bcv);
+            }
+            throw new Error('Formato inválido de ExchangeMonitor');
+        }
+
+        /**
+         * Parsear respuesta de MonitorDolar
+         */
+        function parseMonitorDolar(data) {
+            if (data && data.price) {
+                return parseFloat(data.price);
+            }
+            if (data && data.valor) {
+                return parseFloat(data.valor);
+            }
+            throw new Error('Formato inválido de MonitorDolar');
         }
 
         /**
