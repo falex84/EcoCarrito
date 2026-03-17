@@ -1,4 +1,5 @@
 // API Route para Vercel - Scraping de tasa BCV
+// Implementación basada en: https://github.com/faugustdev/getBCVRate
 // Endpoint: /api/bcv-rate
 
 import axios from 'axios';
@@ -10,20 +11,23 @@ export const config = {
 };
 
 export default async function handler(req) {
+  const url = 'https://www.bcv.org.ve/';
+
   // Solo permitir método GET
   if (req.method !== 'GET') {
     return new Response(
-      JSON.stringify({ error: 'Método no permitido' }),
-      { 
-        status: 405, 
-        headers: { 'Content-Type': 'application/json' } 
+      JSON.stringify({ 
+        success: false, 
+        message: 'Método no permitido' 
+      }),
+      {
+        status: 405,
+        headers: { 'Content-Type': 'application/json' }
       }
     );
   }
 
   try {
-    const url = 'https://www.bcv.org.ve/';
-    
     const response = await axios.get(url, {
       httpsAgent: new https.Agent({
         rejectUnauthorized: false,
@@ -37,12 +41,22 @@ export default async function handler(req) {
     });
 
     if (!response || !response.data) {
-      throw new Error('La respuesta del BCV es nula o no tiene datos');
+      console.error('La respuesta de Axios es nula o no tiene datos.');
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: 'Error en la respuesta de la solicitud' 
+        }),
+        {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
     }
 
     const $ = cheerio.load(response.data);
     const data = $('#dolar strong').text();
-    
+
     if (!data) {
       throw new Error('No se encontró la tasa del dólar en el HTML del BCV');
     }
@@ -52,6 +66,8 @@ export default async function handler(req) {
     if (!rateFormatted || rateFormatted <= 0) {
       throw new Error('Tasa inválida obtenida del BCV');
     }
+
+    console.log(`BCV Rate: ${rateFormatted}`);
 
     // Respuesta exitosa
     return new Response(
@@ -72,12 +88,11 @@ export default async function handler(req) {
 
   } catch (error) {
     console.error('Error en API BCV:', error.message);
-    
+
     return new Response(
       JSON.stringify({
         success: false,
-        error: error.message,
-        fallback: true,
+        message: error.message,
       }),
       {
         status: 500,
