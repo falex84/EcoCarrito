@@ -7,24 +7,18 @@ import * as cheerio from 'cheerio';
 import https from 'https';
 
 export const config = {
-  runtime: 'edge',
+  runtime: 'nodejs',
 };
 
-export default async function handler(req) {
+export default async function handler(req, res) {
   const url = 'https://www.bcv.org.ve/';
 
   // Solo permitir método GET
   if (req.method !== 'GET') {
-    return new Response(
-      JSON.stringify({ 
-        success: false, 
-        message: 'Método no permitido' 
-      }),
-      {
-        status: 405,
-        headers: { 'Content-Type': 'application/json' }
-      }
-    );
+    return res.status(405).json({
+      success: false,
+      message: 'Método no permitido'
+    });
   }
 
   try {
@@ -42,16 +36,10 @@ export default async function handler(req) {
 
     if (!response || !response.data) {
       console.error('La respuesta de Axios es nula o no tiene datos.');
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Error en la respuesta de la solicitud' 
-        }),
-        {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' }
-        }
-      );
+      return res.status(500).json({
+        success: false,
+        message: 'Error en la respuesta de la solicitud'
+      });
     }
 
     const $ = cheerio.load(response.data);
@@ -70,34 +58,19 @@ export default async function handler(req) {
     console.log(`BCV Rate: ${rateFormatted}`);
 
     // Respuesta exitosa
-    return new Response(
-      JSON.stringify({
-        success: true,
-        bcvRate: rateFormatted,
-        source: 'bcv.org.ve',
-        timestamp: new Date().toISOString(),
-      }),
-      {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
-        },
-      }
-    );
+    return res.status(200).json({
+      success: true,
+      bcvRate: rateFormatted,
+      source: 'bcv.org.ve',
+      timestamp: new Date().toISOString(),
+    });
 
   } catch (error) {
     console.error('Error en API BCV:', error.message);
 
-    return new Response(
-      JSON.stringify({
-        success: false,
-        message: error.message,
-      }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 }
