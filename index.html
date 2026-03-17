@@ -248,7 +248,7 @@
                 <div class="flex gap-3">
                     <button id="cancelRateBtn" class="flex-1 py-3 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition font-medium">Cancelar</button>
                 </div>
-                <p class="text-xs text-gray-500 mt-4">La tasa se obtiene automáticamente de <strong>dolarapi.com</strong></p>
+                <p class="text-xs text-gray-500 mt-4">La tasa se obtiene automáticamente de <strong>www.bcv.org.ve</strong></p>
             </div>
         </div>
 
@@ -456,7 +456,15 @@
         let isApiLoading = false;
 
         // API Configuration - Venezuela BCV (Official rate)
-        const API_URL = 'https://ve.dolarapi.com/v1/dolares';
+        // Fuente única: BCV oficial
+        const BCV_URL = 'https://www.bcv.org.ve/';
+        
+        // CORS Proxies para acceder al BCV desde el navegador
+        const CORS_PROXIES = [
+            'https://api.allorigins.win/raw?url=',
+            'https://corsproxy.io/?',
+            'https://api.codetabs.com/v1/proxy?quest='
+        ];
 
         // DOM Elements
         const form = document.getElementById('productForm');
@@ -540,66 +548,51 @@
             }
         }
 
-        // Fetch BCV Rate from API
+        /**
+         * Obtener tasa del BCV directamente desde www.bcv.org.ve
+         * Usa proxies CORS para evitar restricciones del navegador
+         */
         async function fetchBcvRate() {
             if (isApiLoading) return;
-            
+
             isApiLoading = true;
             refreshIcon.classList.add('loading-spinner');
-            setApiStatus('loading', 'Conectando con ve.dolarapi.com...');
+            setApiStatus('loading', 'Conectando con BCV...');
 
             try {
-                const response = await fetch(API_URL);
+                const rate = await fetchBcvDirect();
                 
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                if (!rate || rate <= 0) {
+                    throw new Error('Tasa inválida recibida del BCV');
                 }
 
-                const data = await response.json();
-                
-                // Parse the rate from API response
-                // data[0] = Oficial (BCV), data[1] = Paralelo
-                const oficialData = data.find(d => d.fuente === 'oficial');
-                
-                if (!oficialData) {
-                    throw new Error('No se encontró la tasa oficial del BCV');
-                }
-                
-                const rate = parseFloat(oficialData.promedio);
-                
-                if (isNaN(rate) || rate <= 0) {
-                    throw new Error('Tasa inválida recibida de la API');
-                }
-
-                // Update rate
+                // Éxito - actualizar y guardar
                 bcvRate = rate;
-                rateDate = new Date().toLocaleDateString('es-VE', { 
-                    day: '2-digit', 
-                    month: '2-digit', 
+                rateDate = new Date().toLocaleDateString('es-VE', {
+                    day: '2-digit',
+                    month: '2-digit',
                     year: 'numeric',
                     hour: '2-digit',
                     minute: '2-digit'
                 });
-                rateSource = 'api';
+                rateSource = 'bcv';
 
-                // Save to localStorage
                 localStorage.setItem('bcvRate', bcvRate.toString());
                 localStorage.setItem('rateDate', rateDate);
                 localStorage.setItem('rateSource', rateSource);
 
-                // Update UI
                 updateRateDisplay();
                 render();
-                
-                setApiStatus('online', `Actualizado: ${new Date().toLocaleTimeString('es-VE')}`);
-                showToast('Tasa BCV actualizada desde API');
 
+                setApiStatus('online', `Actualizado: ${new Date().toLocaleTimeString('es-VE')}`);
+                showToast('Tasa BCV actualizada desde www.bcv.org.ve');
+                
             } catch (error) {
                 console.error('Error fetching BCV rate:', error);
-                setApiStatus('offline', 'Error al conectar con API. Usando tasa guardada.');
-                showToast('No se pudo conectar con la API. Verifica tu conexión.', 5000);
-                
-                // Use cached rate if available
+                setApiStatus('offline', 'Error al conectar con BCV. Usando tasa guardada.');
+                showToast('No se pudo conectar con BCV. Verifica tu conexión.', 5000);
+
+                // Usar tasa en caché si está disponible
                 if (bcvRate > 0) {
                     updateRateDisplay();
                 }
@@ -607,6 +600,128 @@
                 isApiLoading = false;
                 refreshIcon.classList.remove('loading-spinner');
             }
+        }
+
+        /**
+         * Scraping directo del sitio web del BCV usando proxies CORS
+         */
+        async function fetchBcvDirect() {
+            for (const proxy of CORS_PROXIES) {
+                try {
+                    setApiStatus('loading', `Conectando con BCV...`);
+                    
+                    const response = await fetch(proxy + encodeURIComponent(BCV_URL), {
+                        headers: { 'Accept': 'text/html' },
+                        signal: AbortSignal.timeout(15000) // 15 segundos timeout
+                    });
+
+                    if (!response.ok) {
+                        console.warn(`Proxy ${proxy} falló con status ${response.status}`);
+                        continue;
+                    }
+
+                    const html = await response.text();
+                    const rate = parseBcvHtml(html);
+
+                    if (rate && rate > 0) {
+                        console.log('Tasa BCV encontrada:', rate);
+                        return rate;
+                    }
+                } catch (error) {
+                    console.warn(`Error con proxy ${proxy}:`, error.message);
+                    continue;
+                }
+            }
+
+            throw new Error('No se pudo obtener la tasa del BCV con ningún proxy');
+        }
+
+        /**
+         * Analizar HTML del BCV para extraer la tasa de cambio
+         * Busca patrones típicos en el sitio web del BCV
+         */
+        function parseBcvHtml(html) {
+            console.log('Buscando tasa en el HTML del BCV...');
+            console.log('Longitud del HTML:', html.length);
+            
+            // Guardar todas las tasas encontradas para seleccionar la más precisa
+            const foundRates = [];
+            
+            // Patrones específicos para el sitio del BCV - ordenados por prioridad
+            const patterns = [
+                // Patrón 1: "1 USD" o "$ 1" seguido de número (la tasa oficial del BCV)
+                [/1\s*USD[^0-9]*?(\d{3}(?:,\d{2,4}))/i, 'oficial'],
+                
+                // Patrón 2: "Dólar" seguido de número grande
+                [/Dólar[^0-9]*?(\d{3}(?:,\d{2,4}))/i, 'dolar'],
+                
+                // Patrón 3: "Dolar" (sin tilde) seguido de número grande
+                [/Dolar[^0-9]*?(\d{3}(?:,\d{2,4}))/i, 'dolar'],
+                
+                // Patrón 4: "USD" seguido de número grande
+                [/USD[^0-9]*?(\d{3}(?:,\d{2,4}))/i, 'usd'],
+                
+                // Patrón 5: "Divisa" seguido de número (puede ser euro u otra)
+                [/Divisa[^0-9]*?(\d{3}(?:,\d{2,4}))/i, 'divisa'],
+                
+                // Patrón 6: Número seguido de "Bs" cerca de "dólar" o "USD"
+                [/(\d{3}(?:,\d{2,4}))\s*Bs/i, 'bs'],
+            ];
+
+            for (let i = 0; i < patterns.length; i++) {
+                const [pattern, type] = patterns[i];
+                const matches = html.match(pattern);
+                
+                if (matches) {
+                    console.log(`Patrón ${i + 1} (${type}) encontrado:`, pattern);
+                    console.log('Match:', matches);
+                    
+                    // Obtener el número capturado
+                    let value = matches[1];
+                    
+                    // Limpiar el valor: convertir coma decimal a punto
+                    value = value.replace(',', '.');
+                    
+                    const rate = parseFloat(value);
+                    
+                    console.log('Valor parseado:', rate);
+                    
+                    // Guardar tasa con su tipo para priorizar después
+                    if (rate >= 300 && rate <= 600) {
+                        foundRates.push({ rate, type, priority: i });
+                        console.log(`✅ Tasa ${type} válida encontrada:`, rate);
+                    }
+                }
+            }
+
+            // Si encontramos tasas, devolver la de mayor prioridad (menor índice)
+            if (foundRates.length > 0) {
+                foundRates.sort((a, b) => a.priority - b.priority);
+                const bestRate = foundRates[0].rate;
+                console.log('🎯 Tasa seleccionada (mayor prioridad):', bestRate, 'Tipo:', foundRates[0].type);
+                return bestRate;
+            }
+
+            // Búsqueda general en todo el HTML como último recurso
+            console.log('Buscando en todo el HTML (búsqueda general)...');
+            const numberPattern = /(\d{3}(?:,\d{2,4}))/g;
+            const allNumbers = html.match(numberPattern) || [];
+            
+            console.log('Números encontrados en el HTML:', allNumbers.slice(0, 20)); // Mostrar primeros 20
+            
+            // Buscar el PRIMER número en rango BCV (300-600) que tenga 2 decimales
+            for (const numStr of allNumbers) {
+                const cleanNum = numStr.replace(',', '.');
+                const num = parseFloat(cleanNum);
+                
+                if (num >= 400 && num <= 500) { // Rango más estrecho para 2026
+                    console.log('Tasa encontrada en búsqueda general:', num);
+                    return num;
+                }
+            }
+
+            console.log('❌ No se encontró la tasa del BCV en el rango esperado (400-500)');
+            return null;
         }
 
         // Update Rate Display
