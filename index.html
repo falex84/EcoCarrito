@@ -202,7 +202,7 @@
                             <span id="apiBadge" class="text-xs bg-white/20 px-2 py-0.5 rounded-full">Actual</span>
                         </h3>
                         <p class="text-sm opacity-80" id="rateDate">Actualizado: --/--/----</p>
-                        <p class="text-xs opacity-70" id="apiSource">Fuente: dolarapi.com</p>
+                        <p class="text-xs opacity-70" id="apiSource">Fuente: BCV</p>
                     </div>
                 </div>
                 <div class="flex items-center gap-3">
@@ -241,7 +241,7 @@
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                         </svg>
-                        Obtener de API
+                        Obtener del BCV
                     </button>
                     <button id="saveRateBtn" class="flex-1 py-3 bg-green-700 hover:bg-green-800 text-white rounded-lg transition font-medium">Guardar</button>
                 </div>
@@ -381,7 +381,7 @@
                     <div class="flex items-center justify-between">
                         <div>
                             <p class="text-sm font-medium opacity-90">¿Tasa desactualizada?</p>
-                            <p class="text-xs opacity-75">Actualiza desde la API</p>
+                            <p class="text-xs opacity-75">Actualiza desde el BCV</p>
                         </div>
                         <button id="quickRateBtn" class="bg-white/20 hover:bg-white/30 p-2 rounded-lg transition">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -455,23 +455,8 @@
         let currentEditIndex = null;
         let isApiLoading = false;
 
-        // API Configuration - Venezuela BCV (Official rate)
-        // Fuente principal: API de Vercel que hace scraping del BCV
-        const API_SOURCES = [
-            { name: 'Vercel API (BCV)', url: '/api/bcv-rate', parser: parseVercelBcv },
-            { name: 'DolarAPI', url: 'https://ve.dolarapi.com/v1/dolares/oficial', parser: parseDolarApiOficial },
-            { name: 'DolarAPI (lista)', url: 'https://ve.dolarapi.com/v1/dolares', parser: parseDolarApi },
-            { name: 'Exchangemonitor', url: 'https://api.exchangemonitor.com/api/v1/latest', parser: parseExchangeMonitor },
-            { name: 'MonitorDolar', url: 'https://monitor-dolar-venezuela.vercel.app/api/price', parser: parseMonitorDolar }
-        ];
-        
-        // CORS Proxies como respaldo
-        const CORS_PROXIES = [
-            'https://api.allorigins.win/raw?url=',
-            'https://corsproxy.io/?',
-            'https://api.codetabs.com/v1/proxy?quest='
-        ];
-        const BCV_URL = 'https://www.bcv.org.ve/';
+        // API Configuration - Solo usamos el scraper del BCV
+        const BCV_API_URL = '/api/bcv-rate';
 
         // DOM Elements
         const form = document.getElementById('productForm');
@@ -556,301 +541,71 @@
         }
 
         /**
-         * Obtener tasa del BCV usando múltiples fuentes de API
-         * Intenta cada fuente en orden hasta encontrar una válida
+         * Obtener tasa del BCV desde la API de Vercel
          */
         async function fetchBcvRate() {
             if (isApiLoading) return;
 
             isApiLoading = true;
             refreshIcon.classList.add('loading-spinner');
-            setApiStatus('loading', 'Buscando tasa BCV...');
+            setApiStatus('loading', 'Conectando con BCV...');
 
-            // Intentar cada fuente de API en orden
-            for (const source of API_SOURCES) {
-                try {
-                    setApiStatus('loading', `Conectando con ${source.name}...`);
-                    
-                    const response = await fetch(source.url, {
-                        signal: AbortSignal.timeout(10000), // 10 segundos timeout
-                        headers: { 'Accept': 'application/json' }
-                    });
-
-                    if (!response.ok) {
-                        console.warn(`${source.name} falló con status ${response.status}`);
-                        continue;
-                    }
-
-                    const data = await response.json();
-                    const rate = source.parser(data);
-
-                    if (rate && rate > 0 && rate < 1000) {
-                        // Éxito - actualizar y guardar
-                        bcvRate = rate;
-                        rateDate = new Date().toLocaleDateString('es-VE', {
-                            day: '2-digit',
-                            month: '2-digit',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                        });
-                        rateSource = 'api';
-
-                        localStorage.setItem('bcvRate', bcvRate.toString());
-                        localStorage.setItem('rateDate', rateDate);
-                        localStorage.setItem('rateSource', rateSource);
-
-                        updateRateDisplay();
-                        render();
-
-                        setApiStatus('online', `Actualizado: ${new Date().toLocaleTimeString('es-VE')}`);
-                        showToast(`Tasa BCV actualizada desde ${source.name}`);
-                        
-                        isApiLoading = false;
-                        refreshIcon.classList.remove('loading-spinner');
-                        return;
-                    }
-                } catch (error) {
-                    console.warn(`Error con ${source.name}:`, error.message);
-                    // Continuar con la siguiente fuente
-                }
-            }
-
-            // Si todas las APIs fallan, intentar scraping directo del BCV
-            console.log('Todas las APIs fallaron, intentando scraping directo del BCV...');
             try {
-                const rate = await fetchBcvDirect();
-                
-                if (rate && rate > 0) {
-                    bcvRate = rate;
-                    rateDate = new Date().toLocaleDateString('es-VE', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                    });
-                    rateSource = 'bcv';
+                const response = await fetch(BCV_API_URL, {
+                    signal: AbortSignal.timeout(15000),
+                    headers: { 'Accept': 'application/json' }
+                });
 
-                    localStorage.setItem('bcvRate', bcvRate.toString());
-                    localStorage.setItem('rateDate', rateDate);
-                    localStorage.setItem('rateSource', rateSource);
-
-                    updateRateDisplay();
-                    render();
-
-                    setApiStatus('online', `Actualizado: ${new Date().toLocaleTimeString('es-VE')}`);
-                    showToast('Tasa BCV actualizada desde www.bcv.org.ve');
-                    
-                    isApiLoading = false;
-                    refreshIcon.classList.remove('loading-spinner');
-                    return;
+                if (!response.ok) {
+                    throw new Error(`Error HTTP: ${response.status}`);
                 }
-            } catch (error) {
-                console.error('Error con scraping BCV:', error);
-            }
 
-            // Todo falló
-            isApiLoading = false;
-            refreshIcon.classList.remove('loading-spinner');
-            setApiStatus('offline', 'Error al conectar. Usando tasa guardada.');
-            showToast('No se pudo obtener la tasa. Verifica tu conexión.', 5000);
+                const data = await response.json();
 
-            if (bcvRate > 0) {
+                if (!data.success || !data.bcvRate) {
+                    throw new Error('Respuesta inválida del BCV');
+                }
+
+                const rate = parseFloat(data.bcvRate);
+
+                if (!rate || rate <= 0) {
+                    throw new Error('Tasa inválida recibida del BCV');
+                }
+
+                // Éxito - actualizar y guardar
+                bcvRate = rate;
+                rateDate = new Date().toLocaleDateString('es-VE', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                rateSource = 'bcv';
+
+                localStorage.setItem('bcvRate', bcvRate.toString());
+                localStorage.setItem('rateDate', rateDate);
+                localStorage.setItem('rateSource', rateSource);
+
                 updateRateDisplay();
-            }
-        }
+                render();
 
-        /**
-         * Parsear respuesta de la API de Vercel (BCV scraping)
-         */
-        function parseVercelBcv(data) {
-            if (data && data.success && data.bcvRate) {
-                return parseFloat(data.bcvRate);
-            }
-            throw new Error('Formato inválido de Vercel BCV API');
-        }
+                setApiStatus('online', `Actualizado: ${new Date().toLocaleTimeString('es-VE')}`);
+                showToast('Tasa BCV actualizada desde www.bcv.org.ve');
+                
+            } catch (error) {
+                console.error('Error fetching BCV rate:', error);
+                setApiStatus('offline', 'Error al conectar con BCV. Usando tasa guardada.');
+                showToast('No se pudo conectar con BCV. Verifica tu conexión.', 5000);
 
-        /**
-         * Parsear respuesta de DolarAPI (endpoint oficial)
-         */
-        function parseDolarApiOficial(data) {
-            // El endpoint /oficial devuelve un solo objeto
-            // Nota: compra y venta pueden ser null, usar promedio
-            if (data && data.promedio) {
-                return parseFloat(data.promedio);
-            }
-            if (data && data.venta) {
-                return parseFloat(data.venta);
-            }
-            if (data && data.compra) {
-                return parseFloat(data.compra);
-            }
-            throw new Error('Formato inválido de DolarAPI');
-        }
-
-        /**
-         * Parsear respuesta de DolarAPI (lista de dólares)
-         */
-        function parseDolarApi(data) {
-            // data es un array, buscar el oficial
-            const oficial = data.find(d => d.nombre === 'oficial' || d.fuente === 'oficial');
-            if (oficial) {
-                // Intentar venta, luego promedio, luego compra
-                if (oficial.venta) return parseFloat(oficial.venta);
-                if (oficial.promedio) return parseFloat(oficial.promedio);
-                if (oficial.compra) return parseFloat(oficial.compra);
-            }
-            throw new Error('No se encontró la tasa oficial');
-        }
-
-        /**
-         * Parsear respuesta de ExchangeMonitor
-         */
-        function parseExchangeMonitor(data) {
-            // Buscar tasa BCV en la respuesta
-            if (data && data.bcv) {
-                return parseFloat(data.bcv);
-            }
-            if (data && data.data && data.data.bcv) {
-                return parseFloat(data.data.bcv);
-            }
-            throw new Error('Formato inválido de ExchangeMonitor');
-        }
-
-        /**
-         * Parsear respuesta de MonitorDolar
-         */
-        function parseMonitorDolar(data) {
-            if (data && data.price) {
-                return parseFloat(data.price);
-            }
-            if (data && data.valor) {
-                return parseFloat(data.valor);
-            }
-            throw new Error('Formato inválido de MonitorDolar');
-        }
-
-        /**
-         * Scraping directo del sitio web del BCV usando proxies CORS
-         */
-        async function fetchBcvDirect() {
-            for (const proxy of CORS_PROXIES) {
-                try {
-                    setApiStatus('loading', `Conectando con BCV...`);
-                    
-                    const response = await fetch(proxy + encodeURIComponent(BCV_URL), {
-                        headers: { 'Accept': 'text/html' },
-                        signal: AbortSignal.timeout(15000) // 15 segundos timeout
-                    });
-
-                    if (!response.ok) {
-                        console.warn(`Proxy ${proxy} falló con status ${response.status}`);
-                        continue;
-                    }
-
-                    const html = await response.text();
-                    const rate = parseBcvHtml(html);
-
-                    if (rate && rate > 0) {
-                        console.log('Tasa BCV encontrada:', rate);
-                        return rate;
-                    }
-                } catch (error) {
-                    console.warn(`Error con proxy ${proxy}:`, error.message);
-                    continue;
+                // Usar tasa en caché si está disponible
+                if (bcvRate > 0) {
+                    updateRateDisplay();
                 }
+            } finally {
+                isApiLoading = false;
+                refreshIcon.classList.remove('loading-spinner');
             }
-
-            throw new Error('No se pudo obtener la tasa del BCV con ningún proxy');
-        }
-
-        /**
-         * Analizar HTML del BCV para extraer la tasa de cambio
-         * Busca patrones típicos en el sitio web del BCV
-         */
-        function parseBcvHtml(html) {
-            console.log('Buscando tasa en el HTML del BCV...');
-            console.log('Longitud del HTML:', html.length);
-            
-            // Guardar todas las tasas encontradas para seleccionar la más precisa
-            const foundRates = [];
-            
-            // Patrones específicos para el sitio del BCV - ordenados por prioridad
-            const patterns = [
-                // Patrón 1: "1 USD" o "$ 1" seguido de número (la tasa oficial del BCV)
-                [/1\s*USD[^0-9]*?(\d{3}(?:,\d{2,4}))/i, 'oficial'],
-                
-                // Patrón 2: "Dólar" seguido de número grande
-                [/Dólar[^0-9]*?(\d{3}(?:,\d{2,4}))/i, 'dolar'],
-                
-                // Patrón 3: "Dolar" (sin tilde) seguido de número grande
-                [/Dolar[^0-9]*?(\d{3}(?:,\d{2,4}))/i, 'dolar'],
-                
-                // Patrón 4: "USD" seguido de número grande
-                [/USD[^0-9]*?(\d{3}(?:,\d{2,4}))/i, 'usd'],
-                
-                // Patrón 5: "Divisa" seguido de número (puede ser euro u otra)
-                [/Divisa[^0-9]*?(\d{3}(?:,\d{2,4}))/i, 'divisa'],
-                
-                // Patrón 6: Número seguido de "Bs" cerca de "dólar" o "USD"
-                [/(\d{3}(?:,\d{2,4}))\s*Bs/i, 'bs'],
-            ];
-
-            for (let i = 0; i < patterns.length; i++) {
-                const [pattern, type] = patterns[i];
-                const matches = html.match(pattern);
-                
-                if (matches) {
-                    console.log(`Patrón ${i + 1} (${type}) encontrado:`, pattern);
-                    console.log('Match:', matches);
-                    
-                    // Obtener el número capturado
-                    let value = matches[1];
-                    
-                    // Limpiar el valor: convertir coma decimal a punto
-                    value = value.replace(',', '.');
-                    
-                    const rate = parseFloat(value);
-                    
-                    console.log('Valor parseado:', rate);
-                    
-                    // Guardar tasa con su tipo para priorizar después
-                    if (rate >= 300 && rate <= 600) {
-                        foundRates.push({ rate, type, priority: i });
-                        console.log(`✅ Tasa ${type} válida encontrada:`, rate);
-                    }
-                }
-            }
-
-            // Si encontramos tasas, devolver la de mayor prioridad (menor índice)
-            if (foundRates.length > 0) {
-                foundRates.sort((a, b) => a.priority - b.priority);
-                const bestRate = foundRates[0].rate;
-                console.log('🎯 Tasa seleccionada (mayor prioridad):', bestRate, 'Tipo:', foundRates[0].type);
-                return bestRate;
-            }
-
-            // Búsqueda general en todo el HTML como último recurso
-            console.log('Buscando en todo el HTML (búsqueda general)...');
-            const numberPattern = /(\d{3}(?:,\d{2,4}))/g;
-            const allNumbers = html.match(numberPattern) || [];
-            
-            console.log('Números encontrados en el HTML:', allNumbers.slice(0, 20)); // Mostrar primeros 20
-            
-            // Buscar el PRIMER número en rango BCV (300-600) que tenga 2 decimales
-            for (const numStr of allNumbers) {
-                const cleanNum = numStr.replace(',', '.');
-                const num = parseFloat(cleanNum);
-                
-                if (num >= 400 && num <= 500) { // Rango más estrecho para 2026
-                    console.log('Tasa encontrada en búsqueda general:', num);
-                    return num;
-                }
-            }
-
-            console.log('❌ No se encontró la tasa del BCV en el rango esperado (400-500)');
-            return null;
         }
 
         // Update Rate Display
@@ -863,7 +618,7 @@
                 } else {
                     rateDateEl.textContent = 'Fecha no disponible';
                 }
-                apiSourceEl.textContent = rateSource === 'api' ? 'Fuente: dolarapi.com (API)' : 'Fuente: Manual';
+                apiSourceEl.textContent = 'Fuente: BCV (Scraper)';
             } else {
                 displayRateEl.textContent = 'Bs. --';
                 summaryRateEl.textContent = 'Tasa no configurada';
