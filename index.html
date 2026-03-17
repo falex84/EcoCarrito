@@ -456,15 +456,16 @@
         let isApiLoading = false;
 
         // API Configuration - Venezuela BCV (Official rate)
-        // Fuente única: BCV oficial
-        const BCV_URL = 'https://www.bcv.org.ve/';
+        // Fuente única: BCV oficial a través de API de Vercel
+        const BCV_API_URL = '/api/bcv-rate';
         
-        // CORS Proxies para acceder al BCV desde el navegador
+        // CORS Proxies como respaldo (solo si falla la API de Vercel)
         const CORS_PROXIES = [
             'https://api.allorigins.win/raw?url=',
             'https://corsproxy.io/?',
             'https://api.codetabs.com/v1/proxy?quest='
         ];
+        const BCV_URL = 'https://www.bcv.org.ve/';
 
         // DOM Elements
         const form = document.getElementById('productForm');
